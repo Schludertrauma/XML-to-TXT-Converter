@@ -1,4 +1,4 @@
-psutil>=5.9.0# XML to TXT Converter for LLM - Requirements
+psutil>=5.9.0
 
 # Python 3.6+
 
