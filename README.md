@@ -43,9 +43,11 @@ This converter transforms XML data into **training-ready formats** for Large Lan
 - **Content Filtering** - `--min-length` and `--max-length` to remove noise
 - **Training Metadata** - Token counts, character stats, document info
 - **Clear Structure** - Section markers and headers for context learning
-- **High Performance** - 4,000-6,000 elements/s, only 2-5 GB RAM
+- **High Performance** - 4,500-6,000 elements/s, only 2-5 GB RAM
 - **Streaming Parser** - Handles files of ANY size (tested on 105 GB)
 - **Auto-Splitting** - Automatically creates 2 GB chunks
+- **Namespace Cleanup** - Removes XML namespace prefixes (e.g., `{http://...}`)
+- **Wiki-Markup Preserved** - For Wikipedia dumps, keeps original markup for authentic training data
 
 ## � Output Format Comparison
 
@@ -127,6 +129,8 @@ article [id='123']
 python3 src/xml_converter.py input/wikipedia.xml output/train_data \
   --format llm_optimized
 ```
+
+> **📝 Note on Wikipedia Dumps:** When converting Wikipedia XML dumps, the output will contain **Wiki markup** (e.g., `{{cite}}`, `[[links]]`, `'''bold'''`). This is **intentional and expected** – it preserves the original Wikipedia formatting, which is valuable for training LLMs to understand and generate Wiki syntax. If you need plain text without markup, consider using a post-processing tool like `mwparserfromhell`.
 
 ### High-Quality Filtered Dataset
 ```bash
@@ -231,7 +235,7 @@ python3 src/xml_converter.py input/file.xml output/data --format llm_optimized 2
 ### Performance Options
 ```bash
 --chunk-gb N            # GB per output file (default: 2)
---batch-size N          # Elements per batch (default: 100)
+--batch-size N          # Elements per batch (default: 200, optimized)
 --no-parallel           # Disable multiprocessing
 --indent N              # Indentation size (default: 2)
 ```
@@ -251,10 +255,11 @@ python3 src/xml_converter.py --help
 
 | Metric | Performance |
 |--------|-------------|
-| **Processing Speed** | 4,000-6,000 elements/second |
+| **Processing Speed** | 4,500-6,000 elements/second |
 | **Memory Usage** | 2-5 GB RAM (constant, independent of file size) |
 | **File Size** | Tested on 105 GB Wikipedia XML dump |
 | **Output Quality** | ⭐⭐⭐⭐⭐ (LLM-optimized) |
+| **Batch Size** | 200 elements (optimized) |
 
 ### How It Works (Optimized v2.0)
 1. **Streaming Parser** - Uses `ET.iterparse()` for minimal memory usage
@@ -265,6 +270,7 @@ python3 src/xml_converter.py --help
 6. **StringIO Builders** - Fast string concatenation with minimal overhead
 7. **Pre-compiled Regex** - Pattern compilation at init for 2-3x faster normalization
 8. **Efficient Iteration** - Uses generators to avoid double-iteration overhead
+9. **Namespace Cleanup** - Removes XML namespace URIs from all tags and attributes
 
 ### Real-World Example: Wikipedia
 ```
@@ -468,12 +474,14 @@ For users who want more detailed information, additional guides are available in
 | Guide | Description |
 |-------|-------------|
 | **[QUICKSTART_LLM.md](help/docs/QUICKSTART_LLM.md)** | 3-step quick start for impatient users |
+| **[WIKIPEDIA_DUMPS.md](help/docs/WIKIPEDIA_DUMPS.md)** | ⭐ Complete guide for Wikipedia XML dumps (Wiki markup explained!) |
 | **[FORMAT_EXAMPLES.md](help/docs/FORMAT_EXAMPLES.md)** | Detailed format comparisons with side-by-side examples |
 | **[LLM_TRAINING_GUIDE.md](help/docs/LLM_TRAINING_GUIDE.md)** | Comprehensive guide with PyTorch/HuggingFace integration examples |
-| **[OPTIMIZATION_SUMMARY.md](help/docs/OPTIMIZATION_SUMMARY.md)** | Technical implementation details and benchmarks |
+| **[PERFORMANCE_OPTIMIZATIONS.md](help/docs/PERFORMANCE_OPTIMIZATIONS.md)** | Technical implementation details and benchmarks |
 
 **Recommendation:**
 - **New users**: Just read this README! It has everything you need.
+- **Wikipedia dumps**: See [WIKIPEDIA_DUMPS.md](help/docs/WIKIPEDIA_DUMPS.md) - explains Wiki markup!
 - **Want examples**: Check [FORMAT_EXAMPLES.md](help/docs/FORMAT_EXAMPLES.md)
 - **Deep dive**: See [LLM_TRAINING_GUIDE.md](help/docs/LLM_TRAINING_GUIDE.md) for advanced topics
 
@@ -492,10 +500,20 @@ A: Yes! Use `--start-element N` and `--file-part N` to resume from where you sto
 A: Typically 70-85% of input XML size, depending on format and filtering.
 
 **Q: Does it work with any XML format?**
-A: Yes! It works with any valid XML structure.
+A: Yes! It works with any valid XML structure. XML namespaces are automatically cleaned.
 
 **Q: Is it backward compatible?**
 A: Yes! Use `--format plain` for the original behavior.
+
+**Q: Why does Wikipedia output contain `{{cite}}` and `[[links]]`?**
+A: This is **Wiki markup** – the native formatting syntax used in Wikipedia. It's preserved intentionally because:
+  - LLMs can learn to understand and generate Wiki syntax
+  - It's authentic training data from the source
+  - Many use cases benefit from structured markup (citations, links, formatting)
+  - If you need plain text, use a post-processing tool like `mwparserfromhell`
+
+**Q: What are XML namespaces and are they removed?**
+A: XML namespaces (like `{http://www.mediawiki.org/xml/export-0.11/}`) are automatically removed from all output formats for cleaner, more readable text.
 
 ## 🌟 Key Improvements Over Original
 

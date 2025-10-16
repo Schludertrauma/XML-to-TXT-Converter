@@ -123,6 +123,9 @@ Machine learning is a subset of artificial intelligence...
 [Statistics footer with token counts]
 ```
 
+### 📝 Note on Wikipedia Dumps
+If converting Wikipedia XML dumps, the output will contain **Wiki markup** (e.g., `{{cite}}`, `[[links]]`, `'''bold'''`). This is **intentional** – it preserves the original Wikipedia formatting, which is valuable for training LLMs. See [LLM_TRAINING_GUIDE.md](LLM_TRAINING_GUIDE.md) for more details.
+
 ## Monitor Progress
 
 ```bash
@@ -153,11 +156,13 @@ ls -lh output/
 
 ## Tips for Best Results
 
-1. **Start with defaults** - They're optimized for most use cases
+1. **Start with defaults** - They're optimized for most use cases (batch size: 200)
 2. **Filter noise** - Use `--min-length 20` to remove short text
 3. **Check samples** - Look at first file before processing large datasets
 4. **Use separators** - They help models learn document boundaries
 5. **Keep metadata** - Useful for debugging and dataset management
+6. **Wiki markup is OK** - For Wikipedia dumps, keeping markup is recommended for LLM training
+7. **Namespaces cleaned** - XML namespace URIs are automatically removed
 
 ## Comparison Table
 

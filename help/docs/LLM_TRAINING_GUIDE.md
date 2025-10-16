@@ -34,6 +34,16 @@ This XML to TXT converter has been optimized for Large Language Model (LLM) trai
    - Element names formatted as proper titles
    - Clear parent-child relationships
 
+6. **Namespace Cleanup**
+   - Automatically removes XML namespace URIs (e.g., `{http://...}`)
+   - Clean, readable tag names in all output formats
+   - No manual pre-processing required
+
+7. **Wiki-Markup Preservation (Wikipedia Dumps)**
+   - Preserves original Wiki formatting (`{{templates}}`, `[[links]]`, etc.)
+   - Valuable for training LLMs on structured markup
+   - Authentic data from Wikipedia source
+
 ## Usage Examples
 
 ### 1. Basic LLM-Optimized Conversion (Recommended)
@@ -139,7 +149,7 @@ python3 src/xml_converter.py input/large_file.xml output/training_data \
 
 ### Performance Options
 - `--chunk-gb N` - GB per output file (default: 2.0)
-- `--batch-size N` - Elements per batch (default: 100)
+- `--batch-size N` - Elements per batch (default: 200, optimized)
 - `--no-parallel` - Disable multiprocessing
 
 ## Output Statistics
@@ -378,12 +388,62 @@ Tested on Wikipedia dump (105 GB XML):
 2. Context unclear → Use `--format llm_optimized`
 3. Whitespace issues → Ensure `--normalize` is NOT disabled
 
+## Wikipedia Dumps & Wiki Markup
+
+### Understanding Wiki Markup in Output
+
+When converting Wikipedia XML dumps, the output will contain **Wiki markup syntax**:
+
+```
+{{cite news |date=31 May 1968 |title=Knights Bachelor}}
+[[Knight Bachelor|knighted]]
+'''bold text'''
+''italic text''
+<ref>Reference text</ref>
+```
+
+**This is intentional and expected!** Wikipedia XML dumps contain the raw wikitext markup, not rendered HTML.
+
+### Why Keep Wiki Markup?
+
+1. **Authentic Training Data** - LLMs learn real Wikipedia formatting
+2. **Structured Information** - Templates contain metadata (citations, infoboxes)
+3. **Link Structure** - Internal links show document relationships
+4. **Format Learning** - Models can learn to generate proper Wiki syntax
+5. **Multi-task Learning** - Useful for tasks beyond plain text generation
+
+### If You Need Plain Text
+
+If your use case requires plain text without markup:
+
+**Option 1: Post-processing with mwparserfromhell**
+```bash
+pip install mwparserfromhell
+
+# Create a post-processing script
+python3 wiki_cleanup.py input/converted_data.txt output/clean_data.txt
+```
+
+**Option 2: Use Pre-rendered Wikipedia Dumps**
+Download "pages-articles-plaintext" instead of "pages-articles-multistream" from Wikipedia.
+
+**Option 3: Online Services**
+Services like WikiExtractor or Wikipedia API provide pre-processed plain text.
+
+### Recommendation
+
+**For most LLM training: Keep the Wiki markup!**
+- Modern LLMs (GPT, LLaMA, etc.) are trained on raw Wikipedia with markup
+- It provides richer training signal than plain text
+- Models learn structured information representation
+
 ## Advanced Tips
 
 1. **Multi-stage Processing**: Convert once in multiple formats for experimentation
 2. **Chunk by Topic**: Use manual splitting for domain-specific training
 3. **Combine with Other Data**: Mix XML-converted data with other sources
 4. **Validation Split**: Keep some files for validation (use `--start-element`)
+5. **Wiki Markup Handling**: Decide early whether to keep or remove markup
 5. **Monitor During Training**: Track which files perform best
 
 ## Questions?

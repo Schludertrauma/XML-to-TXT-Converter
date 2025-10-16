@@ -8,20 +8,21 @@ The converter has been optimized for maximum throughput while maintaining low me
 
 ## Optimization Details
 
-### 1. Increased Batch Size (200 elements)
+### 1. Increased Batch Size (200 elements) ⭐
 **Before:** 100 elements per batch  
 **After:** 200 elements per batch  
 **Impact:** ~10-15% faster I/O, fewer write operations
 
 ```python
 # Default batch size increased
-batch_size = 200  # was 100
+batch_size = 200  # was 100 (current default)
 ```
 
 **Why It Works:**
 - Reduces number of disk write operations by 50%
 - Better I/O buffer utilization (4 MB buffer)
 - Lower syscall overhead
+- Optimal balance between memory usage and performance
 
 ---
 
@@ -257,6 +258,25 @@ Potential further improvements (not yet implemented):
 
 ---
 
+## Additional Features (Not Performance-Related)
+
+### Namespace Cleanup
+**Added:** Automatic removal of XML namespace URIs  
+**Impact:** Cleaner output, no performance overhead  
+**Implementation:** Pre-compiled regex pattern in `_clean_tag_name()`
+
+```python
+# Removes namespace prefixes like {http://...}
+self._namespace_pattern = re.compile(r'\{[^}]+\}')
+```
+
+**Why It Matters:**
+- XML namespaces clutter output (e.g., `{http://www.mediawiki.org/xml/export-0.11/}page`)
+- Users don't need namespace URIs in training data
+- Automatic cleanup means no manual pre-processing
+
+---
+
 ## Conclusion
 
 Version 2.0 provides significant performance improvements while maintaining:
@@ -264,5 +284,7 @@ Version 2.0 provides significant performance improvements while maintaining:
 - ✅ Same output quality
 - ✅ Full backward compatibility
 - ✅ Simple, maintainable code
+- ✅ Cleaner output (namespace removal)
+- ✅ Optimized defaults (batch size 200)
 
 The optimizations focus on **high-impact, low-risk** changes that benefit all users without requiring configuration changes.

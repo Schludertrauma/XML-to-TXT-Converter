@@ -47,6 +47,13 @@ class XMLToTXTConverter:
         self.char_count = 0
         self.line_count = 0
     
+    def _clean_tag_name(self, tag: str) -> str:
+        """Clean XML tag names by removing namespaces and making readable."""
+        # Remove namespace URLs (e.g., {http://...}tag -> tag)
+        if '}' in tag:
+            tag = tag.split('}', 1)[1]
+        return tag
+    
     def _normalize_text(self, text: str) -> str:
         """Normalize text for better LLM training."""
         if not self.normalize_whitespace:
@@ -62,14 +69,17 @@ class XMLToTXTConverter:
         if not self.include_attributes or not element.attrib:
             return ""
         
+        # Clean attribute names (remove namespaces)
+        clean_attribs = {self._clean_tag_name(k): v for k, v in element.attrib.items()}
+        
         if self.output_format == 'llm_optimized':
             # Format as key-value pairs for better LLM understanding
-            attrs = " | ".join([f"{k}: {v}" for k, v in element.attrib.items()])
+            attrs = " | ".join([f"{k}: {v}" for k, v in clean_attribs.items()])
             return f" ({attrs})"
         elif self.output_format == 'structured':
-            return f" {json.dumps(element.attrib)}"
+            return f" {json.dumps(clean_attribs)}"
         else:
-            attrs = ", ".join([f"{k}='{v}'" for k, v in element.attrib.items()])
+            attrs = ", ".join([f"{k}='{v}'" for k, v in clean_attribs.items()])
             return f" [{attrs}]"
     
     def _element_to_text(self, element, level: int = 0, parent_path: str = "") -> str:
@@ -108,23 +118,27 @@ class XMLToTXTConverter:
         # Efficient check for children without double iteration
         has_children = any(True for _ in element)
         
+        # Clean tag name for readability
+        tag_name = self._clean_tag_name(element.tag)
+        
         # Add element header with clear markers
         attributes = self._format_attributes(element)
         
         # Only major sections (with children) get big separators at level 1
         if level == 1 and has_children:
             lines.append(f"\n{'='*60}")
-            lines.append(f"SECTION: {element.tag.upper()}{attributes}")
+            lines.append(f"SECTION: {tag_name.upper()}{attributes}")
             lines.append(f"{'='*60}\n")
         elif level == 1 and not has_children:
             # Simple leaf elements at level 1
-            lines.append(f"\n{element.tag.title()}{attributes}:")
+            lines.append(f"\n{tag_name.title()}{attributes}:")
         elif level > 1:
             # Nested elements
-            lines.append(f"{indent}## {element.tag.title()}{attributes}")
+            lines.append(f"{indent}## {tag_name.title()}{attributes}")
         
         # Process text content
-        if element.text and element.text.strip():
+        has_text = element.text and element.text.strip()
+        if has_text:
             text_content = self._normalize_text(element.text)
             if self._is_valid_text(text_content):
                 # Add content with proper indentation
@@ -140,7 +154,7 @@ class XMLToTXTConverter:
         # Process children
         for child in element:
             child_indent = " " * ((level + 1) * self.indent_size)
-            child_text = self._element_to_text(child, level + 1, element.tag)
+            child_text = self._element_to_text(child, level + 1, tag_name)
             if child_text:
                 lines.append(child_text)
             
@@ -166,20 +180,40 @@ class XMLToTXTConverter:
     def _format_markdown(self, element, level: int, parent_path: str, indent: str) -> List[str]:
         """Format as Markdown for better readability."""
         lines = []
-        attributes = self._format_attributes(element)
+        tag_name = self._clean_tag_name(element.tag)
+        has_children = any(True for _ in element)
         
-        # Use markdown headers
-        header_level = min(level + 1, 6)
-        lines.append(f"{'#' * header_level} {element.tag}{attributes}")
+        # Format attributes for markdown (cleaner than default)
+        attr_str = ""
+        if self.include_attributes and element.attrib:
+            clean_attribs = {self._clean_tag_name(k): v for k, v in element.attrib.items()}
+            attrs = [f"**{k}**: {v}" for k, v in clean_attribs.items()]
+            attr_str = f" ({', '.join(attrs)})"
         
+        # Use markdown headers with appropriate levels
+        if level == 1 and has_children and self.add_separators:
+            # Major sections get horizontal rules
+            lines.append(f"\n---\n")
+            lines.append(f"## {tag_name}{attr_str}\n")
+        else:
+            header_level = min(level + 2, 6)
+            lines.append(f"{'#' * header_level} {tag_name}{attr_str}")
+        
+        # Add text content as blockquote for leaf elements
         if element.text and element.text.strip():
             text_content = self._normalize_text(element.text)
             if self._is_valid_text(text_content):
-                lines.append(f"\n{text_content}\n")
+                if not has_children and level > 0:
+                    # Leaf node - format as blockquote
+                    lines.append(f"> {text_content}\n")
+                else:
+                    lines.append(f"\n{text_content}\n")
         
+        # Process children
         for child in element:
-            child_text = self._element_to_text(child, level + 1, element.tag)
-            lines.append(child_text)
+            child_text = self._element_to_text(child, level + 1, tag_name)
+            if child_text:
+                lines.append(child_text)
             
             if child.tail and child.tail.strip():
                 tail_content = self._normalize_text(child.tail)
@@ -191,43 +225,83 @@ class XMLToTXTConverter:
     def _format_structured(self, element, level: int, parent_path: str, indent: str) -> List[str]:
         """Format as structured data (JSON-like) for programmatic processing."""
         lines = []
+        tag_name = self._clean_tag_name(element.tag)
+        has_children = any(True for _ in element)
         
+        # Build structured data object
         data = {
-            "tag": element.tag,
-            "attributes": element.attrib if element.attrib else {},
-            "text": self._normalize_text(element.text) if element.text and element.text.strip() else None
+            "tag": tag_name,
+            "level": level,
+            "path": f"{parent_path}/{tag_name}" if parent_path else tag_name,
+            "has_children": has_children
         }
         
-        lines.append(f"{indent}{json.dumps(data, ensure_ascii=False)}")
+        # Add attributes if present (with cleaned names)
+        if element.attrib:
+            data["attributes"] = {self._clean_tag_name(k): v for k, v in element.attrib.items()}
         
+        # Add text content if present
+        if element.text and element.text.strip():
+            text_content = self._normalize_text(element.text)
+            if self._is_valid_text(text_content):
+                data["text"] = text_content
+        
+        # Add visual separator for major sections
+        if level == 1 and has_children and self.add_separators:
+            lines.append(f"{indent}{'─' * 40}")
+        
+        # Write JSON object (pretty-printed for readability)
+        lines.append(f"{indent}{json.dumps(data, ensure_ascii=False, indent=2)}")
+        
+        # Process children with increased indentation
         for child in element:
-            child_text = self._element_to_text(child, level + 1, element.tag)
-            lines.append(child_text)
+            child_text = self._element_to_text(child, level + 1, data["path"])
+            if child_text:
+                lines.append(child_text)
         
         return lines
     
     def _format_plain(self, element, level: int, parent_path: str, indent: str) -> List[str]:
-        """Plain text format (original style)."""
+        """Plain text format with improved readability."""
         lines = []
+        tag_name = self._clean_tag_name(element.tag)
+        has_children = any(True for _ in element)
         attributes = self._format_attributes(element)
         
-        if self.include_path and level > 0:
-            lines.append(f"{indent}[{element.tag}]{attributes}")
+        # Add section separators for major sections
+        if level == 1 and has_children and self.add_separators:
+            lines.append(f"\n{indent}{'─' * 50}")
+            lines.append(f"{indent}[{tag_name}]{attributes}")
+            lines.append(f"{indent}{'─' * 50}")
+        elif level == 1 and not has_children:
+            # Simple leaf at level 1
+            lines.append(f"\n{indent}{tag_name}{attributes}:")
         else:
-            lines.append(f"{indent}{element.tag}{attributes}")
+            # Nested elements
+            if self.include_path and level > 0:
+                lines.append(f"{indent}• {tag_name}{attributes}")
+            else:
+                lines.append(f"{indent}{tag_name}{attributes}")
         
+        # Add text content
         if element.text and element.text.strip():
             text_content = self._normalize_text(element.text)
             if self._is_valid_text(text_content):
                 for line in text_content.split('\n'):
                     line = line.strip()
                     if line:
-                        lines.append(f"{indent}  {line}")
+                        if level == 1:
+                            lines.append(f"{indent}  {line}")
+                        else:
+                            lines.append(f"{indent}    {line}")
         
+        # Process children
         for child in element:
-            child_text = self._element_to_text(child, level + 1, element.tag)
-            lines.append(child_text)
+            child_text = self._element_to_text(child, level + 1, tag_name)
+            if child_text:
+                lines.append(child_text)
             
+            # Process tail text
             if child.tail and child.tail.strip():
                 tail_content = self._normalize_text(child.tail)
                 if self._is_valid_text(tail_content):
@@ -353,11 +427,12 @@ Format: {self.output_format}
                     
                     # Write root element header if using certain formats
                     if self.output_format in ['llm_optimized', 'markdown']:
+                        root_tag = self._clean_tag_name(root.tag)
                         attributes = self._format_attributes(root)
                         if self.output_format == 'llm_optimized':
-                            root_line = f"\n{'#'*60}\n# ROOT: {root.tag.upper()}{attributes}\n{'#'*60}\n\n"
+                            root_line = f"\n{'#'*60}\n# ROOT: {root_tag.upper()}{attributes}\n{'#'*60}\n\n"
                         else:
-                            root_line = f"# {root.tag.title()}{attributes}\n\n"
+                            root_line = f"# {root_tag.title()}{attributes}\n\n"
                         current_file.write(root_line)
                         bytes_written += len(root_line.encode('utf-8'))
                         
@@ -384,7 +459,8 @@ Format: {self.output_format}
                 
                 if root_written:
                     # Process element (has_children check is done inside format methods if needed)
-                    element_text = self._element_to_text(elem, level=1, parent_path=root_element.tag)
+                    root_tag = self._clean_tag_name(root_element.tag)
+                    element_text = self._element_to_text(elem, level=1, parent_path=root_tag)
                     
                     element_count += 1
                     processed_in_session += 1
