@@ -1,9 +1,13 @@
 psutil>=5.9.0
+mwparserfromhell>=0.6.0
 
 # Python 3.6+
 
 # Memory monitoring (optional, for test_memory.py)
 psutil>=5.9.0
+
+# Wikipedia markup cleanup (optional, for --clean-wiki-markup flag)
+mwparserfromhell>=0.6.0
 
 # No other dependencies required!
 # The converter uses only Python standard library:

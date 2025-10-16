@@ -130,7 +130,22 @@ python3 src/xml_converter.py input/wikipedia.xml output/train_data \
   --format llm_optimized
 ```
 
-> **📝 Note on Wikipedia Dumps:** When converting Wikipedia XML dumps, the output will contain **Wiki markup** (e.g., `{{cite}}`, `[[links]]`, `'''bold'''`). This is **intentional and expected** – it preserves the original Wikipedia formatting, which is valuable for training LLMs to understand and generate Wiki syntax. If you need plain text without markup, consider using a post-processing tool like `mwparserfromhell`.
+> **📝 Note on Wikipedia Dumps:** When converting Wikipedia XML dumps, the output will contain **Wiki markup** (e.g., `{{cite}}`, `[[links]]`, `'''bold'''`). This is **intentional** – it preserves formatting flexibility. To remove markup for LLM training, add the `--clean-wiki-markup` flag (requires `pip install mwparserfromhell`).
+
+### Wikipedia with Clean Text (No Markup)
+```bash
+# Clean Wikipedia markup for LLM training
+python3 src/xml_converter.py input/enwiki.xml output/clean_data \
+  --format llm_optimized \
+  --clean-wiki-markup \
+  --namespaces 0
+```
+
+> **What `--clean-wiki-markup` does:**
+> - Removes `{{templates}}` and `{{cite}}` tags
+> - Converts `[[links]]` to plain text
+> - Removes `<ref>` reference tags
+> - Filters out redirect pages (`#REDIRECT`)
 
 ### High-Quality Filtered Dataset
 ```bash

@@ -15,6 +15,13 @@ from typing import Optional, List, Dict
 from multiprocessing import Pool, cpu_count
 from collections import Counter
 
+# Optional Wiki markup cleanup support
+try:
+    import mwparserfromhell
+    WIKI_CLEANUP_AVAILABLE = True
+except ImportError:
+    WIKI_CLEANUP_AVAILABLE = False
+
 
 class XMLToTXTConverter:
     
@@ -23,7 +30,8 @@ class XMLToTXTConverter:
                  use_parallel: bool = True, batch_size: int = 200,
                  output_format: str = 'llm_optimized', add_separators: bool = True,
                  normalize_whitespace: bool = True, add_metadata: bool = True,
-                 min_text_length: int = 0, max_text_length: int = 0):
+                 min_text_length: int = 0, max_text_length: int = 0,
+                 clean_wiki_markup: bool = False):
         self.indent_size = indent_size
         self.include_attributes = include_attributes
         self.include_path = include_path
@@ -37,10 +45,16 @@ class XMLToTXTConverter:
         self.add_metadata = add_metadata
         self.min_text_length = min_text_length
         self.max_text_length = max_text_length
+        self.clean_wiki_markup = clean_wiki_markup
         
         # Pre-compile regex patterns for performance
         self._regex_spaces = re.compile(r'[ \t]+')
         self._regex_newlines = re.compile(r'\n\s*\n\s*\n+')
+        
+        # Wiki markup cleanup patterns (pre-compiled for performance)
+        if self.clean_wiki_markup:
+            self._regex_ref_tags = re.compile(r'<ref[^>]*>.*?</ref>', re.DOTALL | re.IGNORECASE)
+            self._regex_whitespace = re.compile(r'\s+')
         
         # Statistics for LLM training insights
         self.token_count = 0
@@ -63,6 +77,51 @@ class XMLToTXTConverter:
         text = self._regex_spaces.sub(' ', text)  # Multiple spaces to single
         text = self._regex_newlines.sub('\n\n', text)  # Multiple newlines to double
         text = text.strip()
+        return text
+    
+    def _clean_wikitext(self, text: str) -> str:
+        """Remove Wikipedia markup from text.
+        
+        Removes:
+        - {{templates}} and {{cite}} tags
+        - [[internal links]] (keeps link text)
+        - <ref> tags
+        - Redirects (#REDIRECT)
+        
+        Returns plain text suitable for LLM training.
+        """
+        if not self.clean_wiki_markup:
+            return text
+        
+        # Check for redirects
+        if text.strip().upper().startswith('#REDIRECT'):
+            return ""
+        
+        # Remove <ref> tags (faster regex, before parsing)
+        text = self._regex_ref_tags.sub('', text)
+        
+        # Use mwparserfromhell if available
+        if WIKI_CLEANUP_AVAILABLE:
+            try:
+                wikicode = mwparserfromhell.parse(text)
+                
+                # Remove templates ({{cite}}, {{infobox}}, etc.)
+                for template in wikicode.filter_templates():
+                    try:
+                        wikicode.remove(template)
+                    except ValueError:
+                        pass
+                
+                # Convert to plain text (handles [[links]] automatically)
+                text = wikicode.strip_code()
+            except Exception:
+                # Fallback to simple regex if parsing fails
+                pass
+        
+        # Normalize whitespace
+        text = self._regex_whitespace.sub(' ', text)
+        text = text.replace('\n ', '\n').strip()
+        
         return text
     
     def _format_attributes(self, element) -> str:
@@ -140,6 +199,7 @@ class XMLToTXTConverter:
         has_text = element.text and element.text.strip()
         if has_text:
             text_content = self._normalize_text(element.text)
+            text_content = self._clean_wikitext(text_content)
             if self._is_valid_text(text_content):
                 # Add content with proper indentation
                 for line in text_content.split('\n'):
@@ -161,6 +221,7 @@ class XMLToTXTConverter:
             # Process tail content
             if child.tail and child.tail.strip():
                 tail_content = self._normalize_text(child.tail)
+                tail_content = self._clean_wikitext(tail_content)
                 if self._is_valid_text(tail_content):
                     for line in tail_content.split('\n'):
                         if line.strip():
@@ -202,6 +263,7 @@ class XMLToTXTConverter:
         # Add text content as blockquote for leaf elements
         if element.text and element.text.strip():
             text_content = self._normalize_text(element.text)
+            text_content = self._clean_wikitext(text_content)
             if self._is_valid_text(text_content):
                 if not has_children and level > 0:
                     # Leaf node - format as blockquote
@@ -217,6 +279,7 @@ class XMLToTXTConverter:
             
             if child.tail and child.tail.strip():
                 tail_content = self._normalize_text(child.tail)
+                tail_content = self._clean_wikitext(tail_content)
                 if self._is_valid_text(tail_content):
                     lines.append(f"\n{tail_content}\n")
         
@@ -243,6 +306,7 @@ class XMLToTXTConverter:
         # Add text content if present
         if element.text and element.text.strip():
             text_content = self._normalize_text(element.text)
+            text_content = self._clean_wikitext(text_content)
             if self._is_valid_text(text_content):
                 data["text"] = text_content
         
@@ -286,6 +350,7 @@ class XMLToTXTConverter:
         # Add text content
         if element.text and element.text.strip():
             text_content = self._normalize_text(element.text)
+            text_content = self._clean_wikitext(text_content)
             if self._is_valid_text(text_content):
                 for line in text_content.split('\n'):
                     line = line.strip()
@@ -304,6 +369,7 @@ class XMLToTXTConverter:
             # Process tail text
             if child.tail and child.tail.strip():
                 tail_content = self._normalize_text(child.tail)
+                tail_content = self._clean_wikitext(tail_content)
                 if self._is_valid_text(tail_content):
                     for line in tail_content.split('\n'):
                         line = line.strip()
@@ -637,8 +703,19 @@ Examples:
                        help='Minimum text length to include (filter short text)')
     parser.add_argument('--max-length', type=int, default=0,
                        help='Maximum text length to include (filter long text)')
+    parser.add_argument('--clean-wiki-markup', action='store_true',
+                       help='Remove Wikipedia markup ([[links]], {{templates}}, <ref> tags). Requires mwparserfromhell.')
     
     args = parser.parse_args()
+    
+    # Check Wiki cleanup availability
+    if args.clean_wiki_markup and not WIKI_CLEANUP_AVAILABLE:
+        print()
+        print("⚠️  Warning: --clean-wiki-markup requires 'mwparserfromhell' library")
+        print("   Install it with: pip install mwparserfromhell")
+        print("   Continuing without Wiki markup cleanup...")
+        print()
+        args.clean_wiki_markup = False
     
     # Show optimization info
     print()
@@ -647,6 +724,8 @@ Examples:
     print(f"   • Whitespace Normalization: {'Enabled' if not args.no_normalize else 'Disabled'}")
     print(f"   • Metadata: {'Enabled' if not args.no_metadata else 'Disabled'}")
     print(f"   • Section Separators: {'Enabled' if not args.no_separators else 'Disabled'}")
+    if args.clean_wiki_markup:
+        print(f"   • Wiki Markup Cleanup: Enabled (removes [[links]], {{{{templates}}}})")
     if args.min_length > 0:
         print(f"   • Minimum Text Length: {args.min_length} chars")
     if args.max_length > 0:
@@ -673,7 +752,8 @@ Examples:
         normalize_whitespace=not args.no_normalize,
         add_metadata=not args.no_metadata,
         min_text_length=args.min_length,
-        max_text_length=args.max_length
+        max_text_length=args.max_length,
+        clean_wiki_markup=args.clean_wiki_markup
     )
     
     converter.convert(

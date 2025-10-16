@@ -130,7 +130,8 @@ def configure_settings():
         'normalize': True,
         'metadata': True,
         'min_length': 0,
-        'max_length': 0
+        'max_length': 0,
+        'clean_wiki_markup': False
     }
     
     while True:
@@ -145,12 +146,13 @@ def configure_settings():
         print(f"  5. Add Metadata: {'Yes' if settings['metadata'] else 'No'}")
         print(f"  6. Min Text Length: {settings['min_length']} chars (0=disabled)")
         print(f"  7. Max Text Length: {settings['max_length']} chars (0=disabled)")
+        print(f"  8. Clean Wiki Markup: {'Yes' if settings['clean_wiki_markup'] else 'No'} (removes [[links]], {{{{templates}}}})")
         print()
-        print("  8. 🔄 Reset to Defaults")
+        print("  9. 🔄 Reset to Defaults")
         print("  0. ✅ Save & Back")
         print()
         
-        choice = input("👉 Choose setting to change (0-8): ").strip()
+        choice = input("👉 Choose setting to change (0-9): ").strip()
         
         if choice == '0':
             return settings
@@ -195,6 +197,13 @@ def configure_settings():
                 print("❌ Invalid number")
                 input("Press Enter...")
         elif choice == '8':
+            settings['clean_wiki_markup'] = not settings['clean_wiki_markup']
+            status = "enabled" if settings['clean_wiki_markup'] else "disabled"
+            print(f"✅ Wiki markup cleanup {status}")
+            if settings['clean_wiki_markup']:
+                print("   ℹ️  Requires: pip install mwparserfromhell")
+            input("Press Enter...")
+        elif choice == '9':
             settings = {
                 'format': 'llm_optimized',
                 'batch_size': 200,
@@ -202,7 +211,8 @@ def configure_settings():
                 'normalize': True,
                 'metadata': True,
                 'min_length': 0,
-                'max_length': 0
+                'max_length': 0,
+                'clean_wiki_markup': False
             }
             print("✅ Settings reset to defaults")
             input("Press Enter...")
@@ -241,6 +251,8 @@ def start_conversion(input_file, settings):
         cmd_parts.append(f"--min-length {settings['min_length']}")
     if settings['max_length'] > 0:
         cmd_parts.append(f"--max-length {settings['max_length']}")
+    if settings.get('clean_wiki_markup', False):
+        cmd_parts.append("--clean-wiki-markup")
     
     command = " ".join(cmd_parts)
     

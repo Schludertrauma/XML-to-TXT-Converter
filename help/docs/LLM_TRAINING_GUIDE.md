@@ -414,15 +414,25 @@ When converting Wikipedia XML dumps, the output will contain **Wiki markup synta
 
 ### If You Need Plain Text
 
-If your use case requires plain text without markup:
+If your use case requires plain text without markup (e.g., your model generates Wiki syntax in outputs):
 
-**Option 1: Post-processing with mwparserfromhell**
+**Option 1: Use `--clean-wiki-markup` flag (Recommended)**
 ```bash
+# Install dependency once
 pip install mwparserfromhell
 
-# Create a post-processing script
-python3 wiki_cleanup.py input/converted_data.txt output/clean_data.txt
+# Convert with automatic cleanup
+python3 src/xml_converter.py input/enwiki.xml output/clean \
+  --format llm_optimized \
+  --clean-wiki-markup \
+  --namespaces 0
 ```
+
+**What it does:**
+- Removes `{{templates}}` and `{{cite}}` tags
+- Converts `[[links]]` to plain text
+- Removes `<ref>` tags
+- Filters redirects
 
 **Option 2: Use Pre-rendered Wikipedia Dumps**
 Download "pages-articles-plaintext" instead of "pages-articles-multistream" from Wikipedia.
@@ -436,6 +446,11 @@ Services like WikiExtractor or Wikipedia API provide pre-processed plain text.
 - Modern LLMs (GPT, LLaMA, etc.) are trained on raw Wikipedia with markup
 - It provides richer training signal than plain text
 - Models learn structured information representation
+
+**When to clean markup:**
+- Your model is generating Wiki syntax in normal text outputs
+- You need pure plain text for specific downstream tasks
+- Training smaller models that might overfit to markup patterns
 
 ## Advanced Tips
 

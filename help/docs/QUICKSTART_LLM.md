@@ -124,7 +124,29 @@ Machine learning is a subset of artificial intelligence...
 ```
 
 ### 📝 Note on Wikipedia Dumps
-If converting Wikipedia XML dumps, the output will contain **Wiki markup** (e.g., `{{cite}}`, `[[links]]`, `'''bold'''`). This is **intentional** – it preserves the original Wikipedia formatting, which is valuable for training LLMs. See [LLM_TRAINING_GUIDE.md](LLM_TRAINING_GUIDE.md) for more details.
+If converting Wikipedia XML dumps, the output will contain **Wiki markup** (e.g., `{{cite}}`, `[[links]]`, `'''bold'''`). This is **intentional** – it preserves formatting flexibility.
+
+**For LLM training**, you should usually **clean the Wiki markup** to avoid models learning the syntax. Simply add the `--clean-wiki-markup` flag:
+
+```bash
+python3 src/xml_converter.py input/enwiki.xml output/clean \
+  --format llm_optimized \
+  --clean-wiki-markup \
+  --namespaces 0
+```
+
+**What `--clean-wiki-markup` does:**
+- ✅ Removes `{{templates}}` and `{{cite}}` tags completely
+- ✅ Converts `[[internal links]]` → extracts plain text
+- ✅ Removes `<ref>` reference tags
+- ✅ Filters out redirect pages (`#REDIRECT`)
+- ✅ Normalizes whitespace
+
+**Requirements:** `pip install mwparserfromhell` (install once in your environment)
+
+For more details, see [WIKIPEDIA_DUMPS.md](WIKIPEDIA_DUMPS.md) and [LLM_TRAINING_GUIDE.md](LLM_TRAINING_GUIDE.md).
+
+---
 
 ## Monitor Progress
 
